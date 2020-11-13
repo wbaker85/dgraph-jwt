@@ -1,0 +1,79 @@
+version: '3.2'
+services:
+  traefik:
+    image: 'traefik:latest'
+    container_name: 'traefik'
+    restart: always
+    command:
+      # - '--api.insecure=true'
+      - '--providers.docker=true'
+      - '--providers.docker.exposedbydefault=false'
+      - '--entrypoints.web.address=:80'
+      - '--entrypoints.web.http.redirections.entrypoint.to=websecure'
+      - '--entrypoints.web.http.redirections.entrypoint.scheme=https'
+      - '--entrypoints.websecure.address=:443'
+      - '--certificatesresolvers.appresolve.acme.tlschallenge=true'
+      - '--certificatesresolvers.appresolve.acme.email=${ACME_EMAIL}'
+      - '--certificatesresolvers.appresolve.acme.storage=/letsencrypt/acme.json'
+    ports:
+      - '80:80'
+      - '443:443'
+      # - '8080:8080'
+    volumes:
+      - 'certs:/letsencrypt'
+      - '/var/run/docker.sock:/var/run/docker.sock:ro'
+
+  proxy:
+    image: nginx
+    restart: always
+    container_name: 'proxy'
+    volumes:
+      - ./nginx:/etc/nginx:ro
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.server.rule=Host(`${HOST_NAME}`)'
+      - 'traefik.http.routers.server.entrypoints=websecure'
+      - 'traefik.http.routers.server.tls.certresolver=appresolve'
+
+  jwt_server:
+    build: ./jwt_server
+    restart: always
+    container_name: 'jwt_server'
+    # ports:
+    #   - '4000:4000'
+    environment:
+      - PORT=4000
+      - JWKS_URI=${JWKS_URI}
+      - HOST_NAME=${HOST_NAME}
+
+  zero:
+    image: dgraph/dgraph:latest
+    container_name: 'dgraph-zero'
+    volumes:
+      - /tmp/data:/dgraph
+    # ports:
+    #   - 5080:5080
+    #   - 6080:6080
+    restart: always
+    command: dgraph zero --my=zero:5080
+
+  alpha:
+    image: dgraph/dgraph:latest
+    container_name: 'dgraph-alpha'
+    volumes:
+      - /tmp/data:/dgraph
+    # ports:
+    #   - 8080:8080
+    #   - 9080:9080
+    restart: always
+    command: dgraph alpha --my=alpha:7080 --zero=zero:5080 --graphql_extensions=false --whitelist 0.0.0.0/0
+
+  # ratel:
+  #   image: dgraph/dgraph:latest
+  #   container_name: 'dgraph-ratel'
+  #   ports:
+  #     - 8000:8000
+  #   command: dgraph-ratel
+
+volumes:
+  certs:
