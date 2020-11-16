@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  proxy:
+    image: nginx
+    volumes:
+      - ./nginx:/etc/nginx:ro
+    networks:
+      - proxy
+      - backend
+    deploy:
+      labels:
+        - 'traefik.enable=true'
+        - 'traefik.http.services.${SERVICE_NAME}.loadbalancer.server.port=80'
+        - 'traefik.http.routers.${SERVICE_NAME}.rule=Host(`${SERVICE_NAME}.${DOMAIN}`)'
+        - 'traefik.http.routers.${SERVICE_NAME}.entrypoints=websecure'
+        - 'traefik.http.routers.${SERVICE_NAME}.tls.certresolver=le'
+        - 'traefik.http.routers.${SERVICE_NAME}.middlewares=corsHeaders'
+        - 'traefik.http.middlewares.corsHeaders.headers.accessControlAllowMethods=GET,OPTIONS,PUT'
+        - 'traefik.http.middlewares.corsHeaders.headers.accessControlAllowOrigin=*'
+        - 'traefik.http.middlewares.corsHeaders.headers.accessControlAllowHeaders=*'
+
+  whoami:
+    image: 'traefik/whoami'
+    networks:
+      - proxy
+      - backend
+    deploy:
+      labels:
+        - 'traefik.enable=true'
+        - 'traefik.http.services.whoami.loadbalancer.server.port=80'
+        - 'traefik.http.routers.whoami.rule=Host(`whoami.${DOMAIN}`)'
+        - 'traefik.http.routers.whoami.entrypoints=web'
+        - 'traefik.http.routers.whoami.entrypoints=websecure'
+        - 'traefik.http.routers.whoami.tls.certresolver=le'
+
+  Alpha:
+    image: dgraph/dgraph:latest
+    volumes:
+      - dgraph_data:/dgraph
+    networks:
+      - backend
+    command: dgraph alpha --my=Alpha:7080 --zero=Zero:5080 --graphql_extensions=false --whitelist 0.0.0.0/0
+
+  Zero:
+    image: dgraph/dgraph:latest
+    volumes:
+      - dgraph_data:/dgraph
+    networks:
+      - backend
+    command: dgraph zero --my=Zero:5080
+
+volumes:
+  dgraph_data:
+
+networks:
+  backend:
+  proxy:
+    external: true

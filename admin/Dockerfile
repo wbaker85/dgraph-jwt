@@ -9,4 +9,4 @@ RUN yarn install
 COPY . .
 
 EXPOSE 4000
-CMD [ "yarn", "nodemon", "src/server.js" ]
+CMD [ "yarn", "nodemon", "index.js" ]
